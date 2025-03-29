@@ -1,0 +1,57 @@
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LinearRegression, Perceptron, LogisticRegression
+from sklearn.metrics import mean_squared_error
+
+# Load the dataset
+df = pd.read_csv('./data/song_data.csv')
+
+# Handle missing values if necessary
+df.dropna(inplace=True)
+
+# Define features and target variable
+X = df[['song_duration_ms', 'acousticness', 'danceability', 'energy', 'instrumentalness', 'key', 'liveness', 'loudness']]
+y = df['song_popularity']
+
+# Split the data
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Standardize the features
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+# Linear Regression
+lr_model = LinearRegression()
+lr_model.fit(X_train_scaled, y_train)
+
+# Linear Perceptron
+perceptron_model = Perceptron(max_iter=1000, tol=1e-3)
+perceptron_model.fit(X_train_scaled, y_train)
+
+# Logistic Regression
+logistic_model = LogisticRegression(max_iter=1000)
+logistic_model.fit(X_train_scaled, y_train)
+
+
+# Linear Regression predictions and MSE
+lr_predictions = lr_model.predict(X_test_scaled)
+lr_mse = mean_squared_error(y_test, lr_predictions)
+
+# Perceptron predictions and MSE
+perceptron_predictions = perceptron_model.predict(X_test_scaled)
+perceptron_mse = mean_squared_error(y_test, perceptron_predictions)
+
+# Logistic Regression predictions and MSE
+logistic_predictions = logistic_model.predict(X_test_scaled)
+logistic_mse = mean_squared_error(y_test, logistic_predictions)
+
+results = pd.DataFrame({
+    'Model': ['Linear Regression', 'Perceptron', 'Logistic Regression'],
+    'Mean Squared Error': [lr_mse, perceptron_mse, logistic_mse]
+})
+
+variance = df['song_popularity'].var()
+print(f"Variance in popularity scores: {variance}")
+print(results)
