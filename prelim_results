@@ -2,56 +2,138 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LinearRegression, Perceptron, LogisticRegression
-from sklearn.metrics import mean_squared_error
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, RandomForestClassifier, GradientBoostingClassifier
+from sklearn.metrics import mean_squared_error, accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-# Load the dataset
-df = pd.read_csv('./data/song_data.csv')
-
-# Handle missing values if necessary
+# Load dataset
+df = pd.read_csv('final/coms474/data/song_data.csv')
 df.dropna(inplace=True)
 
-# Define features and target variable
-X = df[['song_duration_ms', 'acousticness', 'danceability', 'energy', 'instrumentalness', 'key', 'liveness', 'loudness']]
+# Create target column for industry comparison (1 = hit, 0 = not hit)
+df['target'] = (df['song_popularity'] >= 70).astype(int)
+
+# Create combined feature
+df['energy_danceability'] = df['energy'] * df['danceability']
+
+# Define features for modeling
+features = ['song_duration_ms', 'acousticness', 'danceability', 'energy', 'instrumentalness',
+            'key', 'liveness', 'loudness', 'energy_danceability']
+X = df[features]
 y = df['song_popularity']
 
-# Split the data
+# Train-test split (regression)
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-# Standardize the features
+# Standardize
 scaler = StandardScaler()
 X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)
 
-# Linear Regression
-lr_model = LinearRegression()
-lr_model.fit(X_train_scaled, y_train)
+# Regression models
+regression_models = {
+    'Linear Regression': LinearRegression(),
+    'Perceptron': Perceptron(max_iter=1000, tol=1e-3),
+    'Logistic Regression': LogisticRegression(max_iter=1000),
+    'Random Forest': RandomForestRegressor(n_estimators=100, random_state=42),
+    'Gradient Boosting': GradientBoostingRegressor(n_estimators=100, random_state=42)
+}
 
-# Linear Perceptron
-perceptron_model = Perceptron(max_iter=1000, tol=1e-3)
-perceptron_model.fit(X_train_scaled, y_train)
+regression_results = []
+for name, model in regression_models.items():
+    model.fit(X_train_scaled, y_train)
+    preds = model.predict(X_test_scaled)
+    mse = mean_squared_error(y_test, preds)
+    regression_results.append({'Model': name, 'Mean Squared Error': mse})
 
-# Logistic Regression
-logistic_model = LogisticRegression(max_iter=1000)
-logistic_model.fit(X_train_scaled, y_train)
+# Classification setup using popularity_class
+median_popularity = df['song_popularity'].median()
+df['popularity_class'] = (df['song_popularity'] >= median_popularity).astype(int)
 
+y_class = df['popularity_class']
+X_train_clf, X_test_clf, y_train_clf, y_test_clf = train_test_split(X, y_class, test_size=0.2, random_state=42)
+X_train_clf_scaled = scaler.fit_transform(X_train_clf)
+X_test_clf_scaled = scaler.transform(X_test_clf)
 
-# Linear Regression predictions and MSE
-lr_predictions = lr_model.predict(X_test_scaled)
-lr_mse = mean_squared_error(y_test, lr_predictions)
+classification_models = {
+    'Logistic Regression': LogisticRegression(max_iter=1000),
+    'Random Forest Classifier': RandomForestClassifier(n_estimators=100, random_state=42),
+    'Gradient Boosting Classifier': GradientBoostingClassifier(n_estimators=100, random_state=42)
+}
 
-# Perceptron predictions and MSE
-perceptron_predictions = perceptron_model.predict(X_test_scaled)
-perceptron_mse = mean_squared_error(y_test, perceptron_predictions)
+classification_results = []
+clf_predictions_dict = {}
+for name, model in classification_models.items():
+    model.fit(X_train_clf_scaled, y_train_clf)
+    y_pred = model.predict(X_test_clf_scaled)
+    clf_predictions_dict[name] = y_pred
+    classification_results.append({
+        'Model': name,
+        'Accuracy': accuracy_score(y_test_clf, y_pred),
+        'Precision': precision_score(y_test_clf, y_pred),
+        'Recall': recall_score(y_test_clf, y_pred),
+        'F1 Score': f1_score(y_test_clf, y_pred)
+    })
 
-# Logistic Regression predictions and MSE
-logistic_predictions = logistic_model.predict(X_test_scaled)
-logistic_mse = mean_squared_error(y_test, logistic_predictions)
+# Print summary
+print(f"Variance in popularity scores: {df['song_popularity'].var()}\n")
+print("Regression Results (MSE):")
+print(pd.DataFrame(regression_results))
 
-results = pd.DataFrame({
-    'Model': ['Linear Regression', 'Perceptron', 'Logistic Regression'],
-    'Mean Squared Error': [lr_mse, perceptron_mse, logistic_mse]
-})
+print("\nClassification Results:")
+print(pd.DataFrame(classification_results))
 
-variance = df['song_popularity'].var()
-print(f"Variance in popularity scores: {variance}")
-print(results)
+# --- VISUALIZATIONS ---
+
+# Regression MSE bar plot
+reg_df = pd.DataFrame(regression_results)
+plt.figure(figsize=(8, 5))
+sns.barplot(data=reg_df, x='Mean Squared Error', y='Model', palette='viridis')
+plt.title('Regression Models: Mean Squared Error')
+plt.xlabel('MSE')
+plt.ylabel('Model')
+plt.tight_layout()
+plt.show()
+
+# Classification metrics plots
+clf_df = pd.DataFrame(classification_results).set_index('Model')
+metrics = ['Accuracy', 'Precision', 'Recall', 'F1 Score']
+for metric in metrics:
+    plt.figure(figsize=(8, 4))
+    sns.barplot(x=clf_df.index, y=clf_df[metric], palette='crest')
+    plt.title(f'Classification Models: {metric}')
+    plt.ylabel(metric)
+    plt.ylim(0, 1)
+    plt.xticks(rotation=15)
+    plt.tight_layout()
+    plt.show()
+
+# Confusion matrices
+for name, preds in clf_predictions_dict.items():
+    cm = confusion_matrix(y_test_clf, preds)
+    plt.figure(figsize=(5, 4))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', cbar=False)
+    plt.title(f'Confusion Matrix: {name}')
+    plt.xlabel('Predicted')
+    plt.ylabel('Actual')
+    plt.tight_layout()
+    plt.show()
+
+# --- INDUSTRY COMPARISON ---
+
+# Use best classifier (Gradient Boosting Classifier)
+best_clf = classification_models['Gradient Boosting Classifier']
+industry_y_true = df['target']
+industry_X = df[features]
+industry_X_scaled = scaler.transform(industry_X)
+industry_y_pred = best_clf.predict(industry_X_scaled)
+
+industry_cm = confusion_matrix(industry_y_true, industry_y_pred)
+plt.figure(figsize=(6, 5))
+sns.heatmap(industry_cm, annot=True, fmt='d', cmap='YlGnBu', cbar=False)
+plt.title('Model vs Industry Hit Labels\n(Using Gradient Boosting Classifier)')
+plt.xlabel('Predicted')
+plt.ylabel('Actual (Industry)')
+plt.tight_layout()
+plt.show()
